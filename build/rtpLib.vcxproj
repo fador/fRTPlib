@@ -117,9 +117,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\src\frtp.cpp" />
+    <ClCompile Include="..\src\frtp_hevc.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\frtp.h" />
+    <ClInclude Include="..\src\frtp_hevc.h" />
+    <ClInclude Include="..\src\frtp_internal.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

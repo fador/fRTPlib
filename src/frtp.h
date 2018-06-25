@@ -14,6 +14,7 @@
 #endif
 
 #define MAX_PACKET 65535
+#define MAX_PAYLOAD 1500
 #define FRTP_OK 0x0
 #define FRTP_ERROR 0xFFFFFFFF
 

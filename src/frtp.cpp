@@ -128,11 +128,14 @@ uint32_t fRTPPushFrame(fRTPConnection* conn, uint8_t* data, uint32_t datalen, fR
 {
 
   switch (fmt) {
-  case FRTP_HEVC:
-    fRTPInternalPushHEVCFrame(conn, data, datalen, timestamp);
-    break;
-  case FRTP_OPUS:
-    break;
-  default:
+    case FRTP_HEVC:
+      fRTPInternalPushHEVCFrame(conn, data, datalen, timestamp);
+      break;
+    case FRTP_OPUS:
+      break;
+    default:
+      break;
   }
+
+  return FRTP_OK;
 }
