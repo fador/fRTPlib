@@ -20,6 +20,8 @@
 
 #define FRTP_API __declspec(dllexport)   
   
+//#define FRTP_VERBOSE
+
 
 enum fRTPFormat {
   FRTP_HEVC,
@@ -37,7 +39,7 @@ struct fRTPConnection
 
   }
   uint32_t ID;
-  uint32_t socket;
+  uint64_t socket;
   std::thread runnerThread;
   sockaddr_in addrIn;
   sockaddr_in addrOut;  
@@ -63,9 +65,9 @@ struct fRTPPair
 };
 
 struct fRTPState {
-  std::vector<fRTPConnection> _outgoing;
-  std::vector<fRTPConnection> _incoming;
-  std::vector<fRTPPair> _pairs;
+  std::vector<fRTPConnection*> _outgoing;
+  std::vector<fRTPConnection*> _incoming;
+  std::vector<fRTPPair*> _pairs;
 };
 
 uint32_t fRTPGetID();
@@ -75,4 +77,5 @@ FRTP_API fRTPState* fRTPInit();
 FRTP_API uint32_t fRTPCreateOutConn(fRTPState* state, std::string sendAddr, int sendPort, int fromPort);
 FRTP_API uint32_t fRTPCreateInConn(fRTPState* state, std::string listenAddr, int listenPort);
 FRTP_API uint32_t fRTPCreateConnPair(fRTPState* state, std::string listenAddr, int listenPort, std::string sendAddr, int sendPort);
+FRTP_API uint32_t fRTPPushFrame(fRTPState * state, uint32_t connID, uint8_t* data, uint32_t datalen, fRTPFormat fmt, uint32_t timestamp);
 FRTP_API uint32_t fRTPPushFrame(fRTPConnection* conn, uint8_t* data, uint32_t datalen, fRTPFormat fmt, uint32_t timestamp);

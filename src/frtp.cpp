@@ -28,72 +28,75 @@ fRTPState * fRTPInit()
 
 uint32_t fRTPCreateOutConn(fRTPState* state, std::string sendAddr, int sendPort, int fromPort)
 {
-  fRTPConnection newConn;
+  fRTPConnection* newConn = new fRTPConnection();
  
 
-  if ((newConn.socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+  if ((newConn->socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
     return FRTP_ERROR;
   }
 
-  memset(&newConn.addrOut, 0, sizeof(newConn.addrOut));
-  newConn.addrOut.sin_family = AF_INET;
-  inet_pton(AF_INET, sendAddr.c_str(), &(newConn.addrOut.sin_addr));
-  newConn.addrOut.sin_port = htons(sendPort);
+  memset(&newConn->addrOut, 0, sizeof(newConn->addrOut));
+  newConn->addrOut.sin_family = AF_INET;
+  inet_pton(AF_INET, sendAddr.c_str(), &(newConn->addrOut.sin_addr));
+  newConn->addrOut.sin_port = htons(sendPort);
 
-  memset(&newConn.addrIn, 0, sizeof(newConn.addrIn));
-  newConn.addrIn.sin_family = AF_INET;  
-  newConn.addrIn.sin_addr.s_addr = htonl(INADDR_ANY);
-  newConn.addrIn.sin_port = htons(fromPort);
+  memset(&newConn->addrIn, 0, sizeof(newConn->addrIn));
+  newConn->addrIn.sin_family = AF_INET;  
+  newConn->addrIn.sin_addr.s_addr = htonl(INADDR_ANY);
+  newConn->addrIn.sin_port = htons(fromPort);
 
-  if (bind(newConn.socket, (struct sockaddr *) &newConn.addrIn, sizeof(newConn.addrIn)) < 0) {
+  if (bind(newConn->socket, (struct sockaddr *) &newConn->addrIn, sizeof(newConn->addrIn)) < 0) {
     return FRTP_ERROR;
   }
 
-  newConn.ID = fRTPGetID();
+  newConn->ID = fRTPGetID();
 
   state->_outgoing.push_back(newConn);
-  return newConn.ID;
+  return newConn->ID;
 }
 
 uint32_t fRTPCreateInConn(fRTPState* state, std::string listenAddr, int listenPort)
 {
-  fRTPConnection newConn;
+  fRTPConnection *newConn = new fRTPConnection();
 
   // Socket initialization
-  newConn.socket = socket(AF_INET, SOCK_DGRAM, 0);
-  if (newConn.socket < 0) {
+  newConn->socket = socket(AF_INET, SOCK_DGRAM, 0);
+  if (newConn->socket < 0) {
     return FRTP_ERROR;
   }
 
   // Define listen address and port
-  memset((char *)&newConn.addrIn, 0, sizeof(newConn.addrIn));
-  newConn.addrIn.sin_family = AF_INET;
+  memset((char *)&newConn->addrIn, 0, sizeof(newConn->addrIn));
+  newConn->addrIn.sin_family = AF_INET;
 
   // Read IP from string
-  inet_pton(AF_INET, listenAddr.c_str(), &(newConn.addrIn.sin_addr));
-  newConn.addrIn.sin_port = htons(listenPort);  
+  inet_pton(AF_INET, listenAddr.c_str(), &(newConn->addrIn.sin_addr));
+  newConn->addrIn.sin_port = htons(listenPort);  
 
-  if (bind(newConn.socket, (struct sockaddr *) &newConn.addrIn, sizeof(newConn.addrIn)) < 0) {
-    std::cerr << "Inbound connection bind failure" << std::endl;
+  if (bind(newConn->socket, (struct sockaddr *) &newConn->addrIn, sizeof(newConn->addrIn)) < 0) {
+    std::cerr << "[fRTP] Inbound connection bind failure" << std::endl;
     return FRTP_ERROR;
   }
-  newConn.ID = fRTPGetID();
+  newConn->ID = fRTPGetID();
   state->_incoming.push_back(newConn);
-  return newConn.ID;
+  return newConn->ID;
 }
 
 uint32_t fRTPCreateConnPair(fRTPState * state, std::string listenAddr, int listenPort, std::string sendAddr, int sendPort)
 {
-  fRTPPair newPair;
-  newPair.ID = fRTPGetID();
-  newPair.incoming = fRTPCreateInConn(state, listenAddr, listenPort);
-  newPair.outgoing = fRTPCreateOutConn(state, sendAddr, sendPort, listenPort);
+  fRTPPair *newPair = new fRTPPair();
+  newPair->ID = fRTPGetID();
+  newPair->incoming = fRTPCreateInConn(state, listenAddr, listenPort);
+  newPair->outgoing = fRTPCreateOutConn(state, sendAddr, sendPort, listenPort);
 
-  if (newPair.incoming == FRTP_ERROR || newPair.outgoing == FRTP_ERROR) return FRTP_ERROR;
+  if (newPair->incoming == FRTP_ERROR || newPair->outgoing == FRTP_ERROR) {
+    delete newPair;
+    return FRTP_ERROR;
+  }
   
   state->_pairs.push_back(newPair);
 
-  return newPair.ID;
+  return newPair->ID;
 }
 
 uint32_t fRTPInternalSendRTP(fRTPConnection* conn, uint8_t* data, uint32_t datalen, uint8_t marker)
@@ -110,6 +113,9 @@ uint32_t fRTPInternalSendRTP(fRTPConnection* conn, uint8_t* data, uint32_t datal
 
   if (sendto(conn->socket, (const char*)buffer, datalen + 12, 0, (struct sockaddr*) &conn->addrOut, sizeof(conn->addrOut)) == -1)
   {
+#ifdef FRTP_VERBOSE
+    std::cerr << "[fRTP] sendto failure" << std::endl;
+#endif
     return FRTP_ERROR;
   }
 
@@ -121,6 +127,17 @@ uint32_t fRTPInternalSendRTP(fRTPConnection* conn, uint8_t* data, uint32_t datal
   conn->totalBytes += datalen+12;
   conn->processedPackets++;
   return FRTP_OK;
+}
+
+uint32_t fRTPPushFrame(fRTPState * state, uint32_t connID, uint8_t* data, uint32_t datalen, fRTPFormat fmt, uint32_t timestamp)
+{
+
+  for (uint32_t i = 0; i < state->_outgoing.size(); i++) {
+    if (state->_outgoing[i]->ID == connID) {
+      return fRTPPushFrame(state->_outgoing[i], data, datalen, fmt, timestamp);
+    }
+  }
+  return FRTP_ERROR;
 }
 
 
