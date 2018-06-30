@@ -68,7 +68,8 @@ uint32_t fRTPInternalSendHEVCNal(fRTPConnection* conn, uint8_t* data, uint32_t d
     buffer[0] = 49 << 1; // fragmentation unit
     buffer[1] = 1; // TID
 
-    buffer[2] = nalType | 1 << 7;
+    // Set the S bit with NAL type
+    buffer[2] = 1 << 7 | nalType;
     dataPos = 2;
     dataLeft -= 2;
     
@@ -80,7 +81,9 @@ uint32_t fRTPInternalSendHEVCNal(fRTPConnection* conn, uint8_t* data, uint32_t d
       }
       dataPos += MAX_PAYLOAD-3;
       dataLeft -= (MAX_PAYLOAD-3);
-      buffer[2] &= ~(1 << 7);
+
+      // Clear extra bits
+      buffer[2] = nalType;
     }
     // Signal end and send the rest of the data
     buffer[2] |= 1 << 6;

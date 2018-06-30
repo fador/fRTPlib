@@ -18,6 +18,9 @@ int main(int32_t argc, char* argv[])
   uint32_t width = 1280;
   uint32_t height = 720;
 
+  uint16_t outPort = 8888;
+  uint16_t inPort = 8899;
+
   FILE* inputFile = stdin;
 
   if (argc > 1) {
@@ -27,6 +30,12 @@ int main(int32_t argc, char* argv[])
       return EXIT_FAILURE;
     }
   }
+  if (argc > 2) {
+    outPort = atoi(argv[2]);
+  }
+  if (argc > 3) {
+    inPort = atoi(argv[3]);
+  }
 
 #ifdef _WIN32
   if (inputFile == stdin) {
@@ -34,12 +43,11 @@ int main(int32_t argc, char* argv[])
   }
 #endif
 
-  uint32_t connID = fRTPCreateOutConn(state, "192.168.0.101", 8888, 8899);
+  uint32_t connID = fRTPCreateConn(state, "127.0.0.1", outPort, inPort);
   if (connID == FRTP_ERROR) {
     std::cerr << "Failed to create outbound connection" << std::endl;
     return EXIT_FAILURE;
   }
-
 
   kvz_encoder* enc = NULL;
   const kvz_api * const api = kvz_api_get(8);

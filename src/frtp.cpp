@@ -1,6 +1,7 @@
 #include <iostream>
 #include <thread>
 
+
 #include "frtp.h"
 #include "frtp_hevc.h"
 
@@ -26,7 +27,41 @@ fRTPState * fRTPInit()
   return state;
 }
 
-uint32_t fRTPCreateOutConn(fRTPState* state, std::string sendAddr, int sendPort, int fromPort)
+
+fRTPConnection* fRTPInternalConnIDToStruct(fRTPState * state, uint32_t connID) {
+  for (uint32_t i = 0; i < state->_connection.size(); i++) {
+    if (state->_connection[i]->ID == connID) {
+      return state->_connection[i];
+    }
+  }
+  return nullptr;
+}
+
+uint32_t fRTPInternalRecvRTP(fRTPConnection* conn)
+{
+  sockaddr_in fromAddr;
+  while (1) {
+    int fromAddrSize = sizeof(fromAddr);
+    int32_t ret = recvfrom(conn->socket, (char *)conn->inPacketBuffer, conn->inPacketBufferLen, 0, (SOCKADDR *)&fromAddr, &fromAddrSize);
+    if (ret == -1) {
+      /*
+      int _error = WSAGetLastError();
+      if(_error != 10035)
+        std::cerr << "Socket error" << _error << std::endl;
+      return FRTP_ERROR;
+      */
+    }
+    else {
+      std::cerr << "Received" << ret << "bytes" << std::endl;
+      //return FRTP_OK;
+    }
+    
+  }
+
+}
+
+
+uint32_t fRTPCreateConn(fRTPState* state, std::string sendAddr, int sendPort, int fromPort)
 {
   fRTPConnection* newConn = new fRTPConnection();
  
@@ -49,54 +84,54 @@ uint32_t fRTPCreateOutConn(fRTPState* state, std::string sendAddr, int sendPort,
     return FRTP_ERROR;
   }
 
-  newConn->ID = fRTPGetID();
+  struct timeval read_timeout;
+  read_timeout.tv_sec = 0;
+  read_timeout.tv_usec = 10;
 
-  state->_outgoing.push_back(newConn);
-  return newConn->ID;
-}
+  newConn->inPacketBuffer = new uint8_t[MAX_PACKET];
+  newConn->inPacketBufferLen = MAX_PACKET;
 
-uint32_t fRTPCreateInConn(fRTPState* state, std::string listenAddr, int listenPort)
-{
-  fRTPConnection *newConn = new fRTPConnection();
-
-  // Socket initialization
-  newConn->socket = socket(AF_INET, SOCK_DGRAM, 0);
-  if (newConn->socket < 0) {
-    return FRTP_ERROR;
-  }
-
-  // Define listen address and port
-  memset((char *)&newConn->addrIn, 0, sizeof(newConn->addrIn));
-  newConn->addrIn.sin_family = AF_INET;
-
-  // Read IP from string
-  inet_pton(AF_INET, listenAddr.c_str(), &(newConn->addrIn.sin_addr));
-  newConn->addrIn.sin_port = htons(listenPort);  
-
-  if (bind(newConn->socket, (struct sockaddr *) &newConn->addrIn, sizeof(newConn->addrIn)) < 0) {
-    std::cerr << "[fRTP] Inbound connection bind failure" << std::endl;
-    return FRTP_ERROR;
-  }
-  newConn->ID = fRTPGetID();
-  state->_incoming.push_back(newConn);
-  return newConn->ID;
-}
-
-uint32_t fRTPCreateConnPair(fRTPState * state, std::string listenAddr, int listenPort, std::string sendAddr, int sendPort)
-{
-  fRTPPair *newPair = new fRTPPair();
-  newPair->ID = fRTPGetID();
-  newPair->incoming = fRTPCreateInConn(state, listenAddr, listenPort);
-  newPair->outgoing = fRTPCreateOutConn(state, sendAddr, sendPort, listenPort);
-
-  if (newPair->incoming == FRTP_ERROR || newPair->outgoing == FRTP_ERROR) {
-    delete newPair;
-    return FRTP_ERROR;
-  }
+  // Start a blocking recv thread
+  newConn->runnerThread = new std::thread(fRTPInternalRecvRTP, newConn);
   
-  state->_pairs.push_back(newPair);
+  newConn->ID = fRTPGetID();
 
-  return newPair->ID;
+  state->_connection.push_back(newConn);
+  return newConn->ID;
+}
+
+uint32_t fRTPInternalRemoveConn(fRTPState * state, uint32_t connID)
+{
+  for (uint32_t i = 0; i < state->_connection.size(); i++) {
+    if (state->_connection[i]->ID == connID) {
+      state->_connection.erase(state->_connection.begin()+i);
+      return FRTP_OK;
+    }
+  }
+  return FRTP_ERROR;
+}
+
+
+
+uint32_t fRTPCloseConn(fRTPState * state, uint32_t connID)
+{
+  fRTPConnection* conn = fRTPInternalConnIDToStruct(state, connID);
+
+  if (conn == nullptr) return FRTP_ERROR;
+
+
+  if (conn->runnerThread != nullptr) {
+    delete conn->runnerThread;
+    conn->runnerThread = nullptr;
+  }
+
+#ifdef _WIN32
+  closesocket(conn->socket);
+#else
+  close(conn->socket);
+#endif  
+
+  return fRTPInternalRemoveConn(state, connID);
 }
 
 uint32_t fRTPInternalSendRTP(fRTPConnection* conn, uint8_t* data, uint32_t datalen, uint8_t marker)
@@ -129,12 +164,13 @@ uint32_t fRTPInternalSendRTP(fRTPConnection* conn, uint8_t* data, uint32_t datal
   return FRTP_OK;
 }
 
+
 uint32_t fRTPPushFrame(fRTPState * state, uint32_t connID, uint8_t* data, uint32_t datalen, fRTPFormat fmt, uint32_t timestamp)
 {
 
-  for (uint32_t i = 0; i < state->_outgoing.size(); i++) {
-    if (state->_outgoing[i]->ID == connID) {
-      return fRTPPushFrame(state->_outgoing[i], data, datalen, fmt, timestamp);
+  for (uint32_t i = 0; i < state->_connection.size(); i++) {
+    if (state->_connection[i]->ID == connID) {
+      return fRTPPushFrame(state->_connection[i], data, datalen, fmt, timestamp);
     }
   }
   return FRTP_ERROR;
