@@ -4,6 +4,7 @@
 
 #include "frtp.h"
 #include "frtp_hevc.h"
+#include "frtp_opus.h"
 
 uint32_t fRTPGetID()
 {
@@ -35,6 +36,16 @@ fRTPConnection* fRTPInternalConnIDToStruct(fRTPState * state, uint32_t connID) {
     }
   }
   return nullptr;
+}
+
+uint32_t fRTPSetConfig(fRTPState * state, uint32_t connID, uint8_t* config) {
+  for (uint32_t i = 0; i < state->_connection.size(); i++) {
+    if (state->_connection[i]->ID == connID) {
+      state->_connection[i]->config = config;
+      return FRTP_OK;
+    }
+  }
+  return FRTP_ERROR;
 }
 
 uint32_t fRTPInternalRecvRTP(fRTPConnection* conn)
@@ -179,12 +190,14 @@ uint32_t fRTPPushFrame(fRTPState * state, uint32_t connID, uint8_t* data, uint32
 
 uint32_t fRTPPushFrame(fRTPConnection* conn, uint8_t* data, uint32_t datalen, fRTPFormat fmt, uint32_t timestamp)
 {
+  conn->rtp_timestamp = timestamp;
 
   switch (fmt) {
     case FRTP_HEVC:
       fRTPInternalPushHEVCFrame(conn, data, datalen, timestamp);
       break;
     case FRTP_OPUS:
+      fRTPInternalPushOPUSFrame(conn, data, datalen, timestamp);
       break;
     default:
       break;

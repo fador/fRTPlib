@@ -123,11 +123,13 @@
   <ItemGroup>
     <ClCompile Include="..\src\frtp.cpp" />
     <ClCompile Include="..\src\frtp_hevc.cpp" />
+    <ClCompile Include="..\src\frtp_opus.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\frtp.h" />
     <ClInclude Include="..\src\frtp_hevc.h" />
     <ClInclude Include="..\src\frtp_internal.h" />
+    <ClInclude Include="..\src\frtp_opus.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -28,16 +28,28 @@ enum fRTPFormat {
   FRTP_OPUS
 };
 
+struct fRTPConfig_Opus {
+  uint32_t samplerate;
+  uint8_t channels;
+  uint8_t configurationNumber;
+};
+
 struct fRTPConnection
 {
 
   fRTPConnection() {
-
+    config = nullptr;
   }
 
   fRTPConnection(const fRTPConnection& conn) {
-
+    config = nullptr;
   }
+
+
+  ~fRTPConnection() {
+    free(config);
+  }
+
   uint32_t ID;
   uint64_t socket;
   
@@ -55,7 +67,7 @@ struct fRTPConnection
 
   // RTP
   uint16_t rtp_sequence;
-  uint8_t rtp_payload;
+  uint8_t  rtp_payload;
   uint32_t rtp_timestamp;
   uint32_t rtp_ssrc;
 
@@ -64,6 +76,8 @@ struct fRTPConnection
   uint32_t overheadBytes;
   uint32_t totalBytes;
   uint32_t processedPackets;
+
+  uint8_t* config;
 };
 
 struct fRTPPair
@@ -81,7 +95,8 @@ uint32_t fRTPGetID();
 
 FRTP_API fRTPState* fRTPInit();
 
+FRTP_API uint32_t fRTPSetConfig(fRTPState * state, uint32_t connID, uint8_t* config);
 FRTP_API uint32_t fRTPCreateConn(fRTPState* state, std::string sendAddr, int sendPort, int fromPort);
-FRTP_API uint32_t fRTPCloseConn(fRTPConnection* conn);
+FRTP_API uint32_t fRTPCloseConn(fRTPConnection* conn, uint32_t connID);
 FRTP_API uint32_t fRTPPushFrame(fRTPState * state, uint32_t connID, uint8_t* data, uint32_t datalen, fRTPFormat fmt, uint32_t timestamp);
 FRTP_API uint32_t fRTPPushFrame(fRTPConnection* conn, uint8_t* data, uint32_t datalen, fRTPFormat fmt, uint32_t timestamp);
