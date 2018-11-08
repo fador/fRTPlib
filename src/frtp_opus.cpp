@@ -20,7 +20,9 @@ uint32_t fRTPInternalPushOPUSFrame(fRTPConnection* conn, uint8_t* data, uint32_t
   buffer[0] = configByte;
 
   memcpy(&buffer[1], data, datalen);
-  if (fRTPInternalSendRTP(conn, buffer, datalen + 1, 0) == FRTP_ERROR) {
+
+  //if (fRTPInternalSendRTP(conn, buffer, datalen + 1, 0) == FRTP_ERROR) {
+  if (fRTPInternalSendRTP(conn, data, datalen, 0) == FRTP_ERROR) {
     return FRTP_ERROR;
   }
 

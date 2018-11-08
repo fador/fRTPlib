@@ -1,6 +1,7 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <chrono>
 
 #include <frtp.h>
 
@@ -37,7 +38,7 @@ void audioSender(fRTPState *state, int outPort, int inPort, FILE* inFile, int sa
 
   config->channels = channels;
   config->samplerate = samplerate;
-  config->configurationNumber = 31; //CELT - only | FB | 20 ms
+  config->configurationNumber = 15; // Hydrib | FB | 20 ms
 
   uint32_t connID = fRTPCreateConn(state, "127.0.0.1", outPort, inPort);
   std::cerr << "Audio initialized, ID: " << connID << " IN: " << inPort << " OUT: " << outPort << std::endl;
@@ -51,8 +52,12 @@ void audioSender(fRTPState *state, int outPort, int inPort, FILE* inFile, int sa
   uint32_t outputSize = 25000;
   uint8_t* outData = (uint8_t*)malloc(outputSize);
   int frame = 0;
-  while (!done) {
 
+  std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
+  std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
+
+  while (!done) {
+    //start = std::chrono::high_resolution_clock::now();
     if (!fread(inFrame, dataLenPerFrame, 1, inFile)) {
       done = true;
     }
@@ -60,15 +65,22 @@ void audioSender(fRTPState *state, int outPort, int inPort, FILE* inFile, int sa
       int32_t len = opus_encode(opusEnc, (opus_int16*)inFrame, FRAME_SIZE, outData, outputSize);
 
       // 20 ms per frame
-      if (fRTPPushFrame(state, connID, outData, len, fRTPFormat::FRTP_OPUS, (48000 / 20)*frame) == FRTP_ERROR) {
+      if (fRTPPushFrame(state, connID, outData, len, fRTPFormat::FRTP_OPUS, 960*frame) == FRTP_ERROR) {
         std::cerr << "RTP push failure" << std::endl;
       }
-      Sleep(19);
-
+      
       frame++;
+      end = std::chrono::high_resolution_clock::now();
+      auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+      //Sleep(15);
+      double diff = 20.0 - (elapsed_time/(double)frame);
+      std::this_thread::sleep_for(std::chrono::milliseconds((int)diff));
+
+      
     }
   }
 
+  
   opus_encoder_destroy(opusEnc);
 
   return;
@@ -116,7 +128,7 @@ int main(int32_t argc, char* argv[])
       return EXIT_FAILURE;
     }
     std::cerr << "Init audio thread" << std::endl;
-    audioThread = std::thread(audioSender, state, outPort + 1, inPort + 1, audioInputFile, 48000, 2);
+    audioThread = std::thread(audioSender, state, outPort + 2, inPort + 2, audioInputFile, 48000, 2);
   }
 
 #ifdef _WIN32
@@ -160,7 +172,12 @@ int main(int32_t argc, char* argv[])
   uint8_t inputCounter = 0;
   uint8_t outputCounter = 0;
   uint32_t frame = 0;
+  uint32_t frameIn = 0;
 
+  std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
+  std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
+
+  uint8_t* outData = (uint8_t*)malloc(1024*1024);
   while (!done) {
     kvz_data_chunk* chunks_out = NULL;
     kvz_picture *img_rec = NULL;
@@ -211,7 +228,7 @@ int main(int32_t argc, char* argv[])
         chunk = chunk->next) {
         written += chunk->len;
       }
-      uint8_t* outData = (uint8_t*)malloc(written);
+      
       uint32_t dataPos = 0;
       for (kvz_data_chunk *chunk = chunks_out;
         chunk != NULL;
@@ -223,15 +240,20 @@ int main(int32_t argc, char* argv[])
 
       // Do the RTP sending
       frame++;
-      if (fRTPPushFrame(state, connID, outData, written, fRTPFormat::FRTP_HEVC, (90000 / 25)*frame) == FRTP_ERROR) {
+      if (fRTPPushFrame(state, connID, outData, written, fRTPFormat::FRTP_HEVC, (90000 / 24)*frame) == FRTP_ERROR) {
         std::cerr << "RTP push failure" << std::endl;
       }
-
-      free(outData);
     }
+
+    frameIn++;
+    end = std::chrono::high_resolution_clock::now();
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    //Sleep(15);
+    double diff = (1000.0 / 24.0) - (elapsed_time / (double)frameIn);
+    std::this_thread::sleep_for(std::chrono::milliseconds((int)diff));
   }
 
   cleanup:
-
+  free(outData);
   return EXIT_SUCCESS;
 }
