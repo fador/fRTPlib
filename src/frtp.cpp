@@ -63,14 +63,47 @@ uint32_t fRTPInternalRecvRTP(fRTPConnection* conn)
       */
     }
     else {
-      std::cerr << "Received" << ret << "bytes" << std::endl;
-      //return FRTP_OK;
+      fRTPFrameOut* frame = new fRTPFrameOut;
+      frame->marker = (conn->inPacketBuffer[1] & 0x80) ? 1 : 0;
+      frame->rtp_payload = conn->inPacketBuffer[1] & 0x7f;
+      frame->rtp_sequence = ntohs(*(uint16_t*)&conn->inPacketBuffer[2]);
+      frame->rtp_timestamp = ntohl(*(uint32_t*)&conn->inPacketBuffer[4]);
+      frame->rtp_ssrc = ntohl(*(uint32_t*)&conn->inPacketBuffer[8]);
+      frame->data = new uint8_t[ret-12];
+      frame->datalen = ret - 12;
+      memcpy(frame->data, &conn->inPacketBuffer[12], frame->datalen);
+
+      conn->framesOut.push_back(frame);
+
+#ifdef FRTP_VERBOSE
+      std::cerr << "[fRTP] Received" << ret << "bytes, " << conn->framesOut.size() << " frames in buffer" << std::endl;
+#endif
+
     }
     
   }
 
 }
 
+fRTPFrameOut* fRTPGetReceived(fRTPState * state, uint32_t connID)
+{
+  fRTPConnection* conn = fRTPInternalConnIDToStruct(state, connID);
+
+  if (conn == nullptr || conn->framesOut.size() == 0) return nullptr;
+
+  fRTPFrameOut* out = conn->framesOut.back();
+  conn->framesOut.pop_back();
+
+  return out;
+}
+
+uint32_t fRTPFreeFrame(fRTPFrameOut* frame)
+{
+  delete frame->data;
+  delete frame;
+
+  return FRTP_OK;
+}
 
 uint32_t fRTPCreateConn(fRTPState* state, std::string sendAddr, int sendPort, int fromPort)
 {
@@ -175,14 +208,22 @@ uint32_t fRTPInternalSendRTP(fRTPConnection* conn, uint8_t* data, uint32_t datal
   return FRTP_OK;
 }
 
+uint32_t fRTPSetFormat(fRTPState * state, uint32_t connID, fRTPFormat in, fRTPFormat out)
+{
+  fRTPConnection* conn = fRTPInternalConnIDToStruct(state, connID);
+  if (conn != nullptr) {
+    conn->setFormat(in, out);
+    return FRTP_OK;
+  }
+  return FRTP_ERROR;
+}
+
 
 uint32_t fRTPPushFrame(fRTPState * state, uint32_t connID, uint8_t* data, uint32_t datalen, fRTPFormat fmt, uint32_t timestamp)
 {
-
-  for (uint32_t i = 0; i < state->_connection.size(); i++) {
-    if (state->_connection[i]->ID == connID) {
-      return fRTPPushFrame(state->_connection[i], data, datalen, fmt, timestamp);
-    }
+  fRTPConnection* conn = fRTPInternalConnIDToStruct(state, connID);
+  if (conn != nullptr) {
+    return fRTPPushFrame(conn, data, datalen, fmt, timestamp);
   }
   return FRTP_ERROR;
 }
@@ -194,12 +235,15 @@ uint32_t fRTPPushFrame(fRTPConnection* conn, uint8_t* data, uint32_t datalen, fR
 
   switch (fmt) {
     case FRTP_HEVC:
-      fRTPInternalPushHEVCFrame(conn, data, datalen, timestamp);
+      return fRTPInternalPushHEVCFrame(conn, data, datalen, timestamp);
       break;
     case FRTP_OPUS:
-      fRTPInternalPushOPUSFrame(conn, data, datalen, timestamp);
+      return fRTPInternalPushOPUSFrame(conn, data, datalen, timestamp);
       break;
     default:
+      if (fRTPInternalSendRTP(conn, data, datalen, 0) == FRTP_ERROR) {
+        return FRTP_ERROR;
+      }
       break;
   }
 

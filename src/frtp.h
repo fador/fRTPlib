@@ -24,6 +24,7 @@
 
 
 enum fRTPFormat {
+  FRTP_GENERIC,
   FRTP_HEVC,
   FRTP_OPUS
 };
@@ -34,15 +35,30 @@ struct fRTPConfig_Opus {
   uint8_t configurationNumber;
 };
 
+struct fRTPFrameOut {
+  uint32_t rtp_timestamp;
+  uint32_t datalen;
+  uint32_t rtp_ssrc;
+  uint16_t rtp_sequence;
+  uint8_t* data;
+  uint8_t rtp_payload;
+  uint8_t marker;
+  fRTPFormat fmt;
+};
+
 struct fRTPConnection
 {
 
   fRTPConnection() {
     config = nullptr;
+    inFormat = FRTP_GENERIC;
+    outFormat = FRTP_GENERIC;
   }
 
   fRTPConnection(const fRTPConnection& conn) {
     config = nullptr;
+    inFormat = FRTP_GENERIC;
+    outFormat = FRTP_GENERIC;
   }
 
 
@@ -50,11 +66,19 @@ struct fRTPConnection
     free(config);
   }
 
+  void setFormat(fRTPFormat in, fRTPFormat out) {
+    inFormat = in;
+    outFormat = out;
+  }
+
   uint32_t ID;
   uint64_t socket;
   
   sockaddr_in addrIn;
-  sockaddr_in addrOut;  
+  sockaddr_in addrOut;
+
+  fRTPFormat inFormat;
+  fRTPFormat outFormat;
   
   // Receiving
   std::thread* runnerThread;
@@ -63,6 +87,8 @@ struct fRTPConnection
 
   uint8_t* frameBuffer; // Larger buffer for storing incoming frame
   uint32_t frameBufferLen;
+
+  std::vector<fRTPFrameOut*> framesOut;
 
 
   // RTP
@@ -95,8 +121,10 @@ uint32_t fRTPGetID();
 
 FRTP_API fRTPState* fRTPInit();
 
+FRTP_API uint32_t fRTPSetFormat(fRTPState * state, uint32_t connID, fRTPFormat in, fRTPFormat out);
 FRTP_API uint32_t fRTPSetConfig(fRTPState * state, uint32_t connID, uint8_t* config);
+FRTP_API fRTPFrameOut* fRTPGetReceived(fRTPState * state, uint32_t connID);
 FRTP_API uint32_t fRTPCreateConn(fRTPState* state, std::string sendAddr, int sendPort, int fromPort);
-FRTP_API uint32_t fRTPCloseConn(fRTPConnection* conn, uint32_t connID);
+FRTP_API uint32_t fRTPCloseConn(fRTPState* conn, uint32_t connID);
 FRTP_API uint32_t fRTPPushFrame(fRTPState * state, uint32_t connID, uint8_t* data, uint32_t datalen, fRTPFormat fmt, uint32_t timestamp);
 FRTP_API uint32_t fRTPPushFrame(fRTPConnection* conn, uint8_t* data, uint32_t datalen, fRTPFormat fmt, uint32_t timestamp);
